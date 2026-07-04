@@ -13,15 +13,20 @@ void StartThread(
     const std::function<bool(void)>& Process,
     const std::chrono::seconds timeout)
 {
+    // Process and timeout are captured by value: Process is bound to a
+    // temporary at the call site and timeout is a by-value parameter, so
+    // both would dangle once StartThread returns if captured by reference.
     thread = std::thread(
-        [&] ()
+        [&running, Process, timeout] ()
         {
-            auto start = std::chrono::high_resolution_clock::now();
+            // steady_clock is monotonic; high_resolution_clock isn't
+            // guaranteed to be (it can alias system_clock and jump backward).
+            auto start = std::chrono::steady_clock::now();
             while(running)
             {
                 bool aborted = Process();
 
-                auto end = std::chrono::high_resolution_clock::now();
+                auto end = std::chrono::steady_clock::now();
                 auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
                 if (aborted || duration > timeout)
                 {
@@ -34,7 +39,12 @@ void StartThread(
 
 int main(int argc, char **argv)
 {
-    std::atomic<bool> my_running = true;
+    // Each thread needs its own running flag: sharing one atomic<bool>
+    // means whichever thread stops first (by its own timeout or abort)
+    // also kills the other thread's loop, even though the two loops
+    // have independent timeouts and stop conditions.
+    std::atomic<bool> my_running1 = true;
+    std::atomic<bool> my_running2 = true;
     std::thread my_thread1, my_thread2;
     int loop_counter1 = 0, loop_counter2 = 0;
 
@@ -42,7 +52,7 @@ int main(int argc, char **argv)
 
     StartThread(
         my_thread1,
-        my_running, 
+        my_running1,
         [&]()
         {
             // "some actions" simulated with waiting
@@ -54,10 +64,10 @@ int main(int argc, char **argv)
 
     StartThread(
         my_thread2,
-        my_running, 
+        my_running2,
         [&]()
         {
-            // "some actions" simulated with waiting 
+            // "some actions" simulated with waiting
             if (loop_counter2 < 5)
             {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1000));
