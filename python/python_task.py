@@ -1,8 +1,14 @@
 def rotate_in_place(matrix):
+    # matrix[r][c] = matrix[n-c-1][r] reads and writes the same matrix
+    # while iterating, so later reads see values already overwritten by
+    # earlier writes. Transpose then reverse each row instead: both steps
+    # are safe in place and together give the same 90-degree rotation.
     n = len(matrix)
     for r in range(n):
-        for c in range(n):
-            matrix[r][c] = matrix[n-c-1][r]
+        for c in range(r + 1, n):
+            matrix[r][c], matrix[c][r] = matrix[c][r], matrix[r][c]
+    for row in matrix:
+        row.reverse()
 
 
 MATRIX1 = [
