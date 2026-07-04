@@ -43,6 +43,19 @@ int main(int argc, char **argv)
     // means whichever thread stops first (by its own timeout or abort)
     // also kills the other thread's loop, even though the two loops
     // have independent timeouts and stop conditions.
+    //
+    // Not a bug, just a thought: these four variables likely end up on the
+    // same cache line, and each thread pounds its own half concurrently --
+    // that's false sharing. Not worth fixing here since Process() sleeps
+    // 1-2s per iteration, so a few nanoseconds of cache traffic is noise.
+    // If this ever became a tight, sleep-free loop, this is how you'd fix it:
+    //
+    //   struct alignas(64) ThreadState
+    //   {
+    //       std::atomic<bool> running{true};
+    //       int loopCounter = 0;
+    //   };
+    //   ThreadState state1, state2; // each gets its own cache line
     std::atomic<bool> my_running1 = true;
     std::atomic<bool> my_running2 = true;
     std::thread my_thread1, my_thread2;
